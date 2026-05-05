@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Stayful — Audio to Text</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green: rgb(93,129,86);
+    --green-light: #eaf3de;
+    --green-dark: #3b6d11;
+    --red: #c0392b;
+    --red-light: #faeee7;
+    --blue-light: #e8f0fe;
+    --blue: #1a56a4;
+    --border: rgba(0,0,0,0.1);
+    --surface: #ffffff;
+    --surface2: #f7f6f3;
+    --text: #1a1a1a;
+    --text2: #6b6b6b;
+    --text3: #aaa;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+  body { font-family: Georgia, serif; background: #f2f0eb; color: var(--text); min-height: 100vh; padding: 2rem 1rem 4rem; }
+  .app { max-width: 780px; margin: 0 auto; }
+  .header { display: flex; align-items: center; gap: 12px; margin-bottom: 2rem; }
+  .logo-mark { width: 36px; height: 36px; background: var(--green); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .logo-mark svg { width: 18px; height: 18px; fill: white; }
+  .header h1 { font-size: 20px; font-weight: 500; }
+  .header p { font-size: 13px; color: var(--text2); font-family: system-ui, sans-serif; margin-top: 2px; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 1.25rem; background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 5px; }
+  .tab { flex: 1; padding: 9px; border: none; border-radius: 8px; font-size: 13px; font-family: system-ui, sans-serif; font-weight: 500; cursor: pointer; background: transparent; color: var(--text2); transition: all 0.15s; }
+  .tab.active { background: var(--green); color: white; }
+  .tab:not(.active):hover { background: var(--surface2); }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .status-bar { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 12px; font-family: 'Courier New', monospace; color: var(--text2); margin-bottom: 1.25rem; min-height: 36px; }
+
+  /* Live recording */
+  .recorder-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 2rem 1.5rem; margin-bottom: 1.25rem; text-align: center; }
+  .wave-wrap { height: 52px; display: flex; align-items: center; justify-content: center; gap: 3px; margin-bottom: 1.75rem; }
+  .wave-bar { width: 4px; border-radius: 2px; background: var(--green); opacity: 0.25; height: 8px; }
+  .recording .wave-bar { opacity: 1; animation: wave var(--dur,.8s) ease-in-out infinite alternate; animation-delay: var(--delay,0s); }
+  @keyframes wave { from{height:6px} to{height:var(--peak,32px)} }
+  .rec-btn { width: 72px; height: 72px; border-radius: 50%; border: none; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; outline: none; transition: box-shadow 0.15s; }
+  .rec-btn.idle { background: var(--green); box-shadow: 0 4px 16px rgba(93,129,86,.35); }
+  .rec-btn.active { background: var(--red); animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 4px 16px rgba(192,57,43,.35)} 50%{box-shadow:0 4px 28px rgba(192,57,43,.6)} }
+  .rec-btn svg { width: 28px; height: 28px; fill: white; }
+  .rec-label { display: block; font-size: 13px; font-family: system-ui, sans-serif; color: var(--text2); margin-top: 14px; }
+  .timer { font-size: 13px; font-family: 'Courier New', monospace; color: var(--red); margin-top: 6px; min-height: 20px; font-weight: 600; letter-spacing: .05em; }
+  .lang-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 1.5rem; font-size: 13px; font-family: system-ui, sans-serif; color: var(--text2); }
+  select { font-size: 13px; font-family: system-ui, sans-serif; padding: 5px 10px; border-radius: var(--radius-sm); border: 1px solid rgba(0,0,0,.15); background: var(--surface2); color: var(--text); cursor: pointer; outline: none; }
+
+  /* Upload */
+  .upload-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); padding: 1.75rem 1.5rem; margin-bottom: 1.25rem; }
+  .drop-zone { border: 2px dashed rgba(93,129,86,.4); border-radius: var(--radius); padding: 2rem 1.5rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--green); background: var(--green-light); }
+  .drop-icon { width: 44px; height: 44px; margin: 0 auto 12px; background: var(--green-light); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .drop-icon svg { width: 22px; height: 22px; fill: var(--green); }
+  .drop-title { font-size: 15px; font-family: system-ui, sans-serif; font-weight: 500; margin-bottom: 6px; }
+  .drop-sub { font-size: 12px; font-family: system-ui, sans-serif; color: var(--text3); }
+  .drop-sub span { color: var(--green); font-weight: 500; cursor: pointer; }
+  #file-input { display: none; }
+
+  .queue-header { display: flex; align-items: center; justify-content: space-between; margin: 1.25rem 0 0.75rem; }
+  .queue-title { font-size: 13px; font-family: system-ui, sans-serif; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .08em; }
+  .queue-actions { display: flex; gap: 8px; }
+  .btn-sm { font-size: 12px; font-family: system-ui, sans-serif; font-weight: 500; padding: 5px 14px; border-radius: 6px; border: 1px solid rgba(0,0,0,.15); background: transparent; color: var(--text2); cursor: pointer; }
+  .btn-sm:hover { background: rgba(0,0,0,.05); }
+  .btn-primary { background: var(--green); color: white; border-color: var(--green); }
+  .btn-primary:hover { opacity: .85; background: var(--green); }
+  .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+
+  .queue-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+  .queue-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface2); border: 0.5px solid var(--border); }
+  .qi-icon { width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; background: var(--green-light); }
+  .qi-icon svg { width: 15px; height: 15px; fill: var(--green); }
+  .qi-info { flex: 1; min-width: 0; }
+  .qi-name { font-size: 13px; font-family: system-ui, sans-serif; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .qi-meta { font-size: 11px; font-family: system-ui, sans-serif; color: var(--text3); margin-top: 2px; }
+  .qi-status { font-size: 11px; font-family: system-ui, sans-serif; font-weight: 600; padding: 3px 8px; border-radius: 4px; white-space: nowrap; flex-shrink: 0; }
+  .qi-status.pending { background: var(--surface2); color: var(--text3); border: 1px solid var(--border); }
+  .qi-status.processing { background: #fff8e1; color: #b45309; border: 1px solid rgba(180,83,9,.2); }
+  .qi-status.done { background: var(--green-light); color: var(--green-dark); border: 1px solid rgba(93,129,86,.2); }
+  .qi-status.error { background: var(--red-light); color: var(--red); border: 1px solid rgba(192,57,43,.2); }
+  .qi-remove { background: none; border: none; cursor: pointer; color: var(--text3); font-size: 16px; line-height: 1; padding: 2px 4px; flex-shrink: 0; }
+  .qi-remove:hover { color: var(--red); }
+  .progress-wrap { height: 3px; background: rgba(93,129,86,.15); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+  .progress-bar { height: 100%; background: var(--green); border-radius: 2px; width: 0%; transition: width 0.4s; }
+
+  .results-section { display: none; }
+  .results-section.visible { display: block; }
+  .result-block { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 1rem; }
+  .result-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 0.5px solid var(--border); background: var(--surface2); }
+  .result-filename { font-size: 13px; font-family: system-ui, sans-serif; font-weight: 600; }
+  .result-wordcount { font-size: 11px; font-family: system-ui, sans-serif; color: var(--text3); margin-top: 2px; }
+  .result-body { padding: 1.25rem 1.5rem; max-height: 360px; overflow-y: auto; }
+
+  /* Shared transcript */
+  .transcript-card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); overflow: hidden; margin-bottom: 1.25rem; }
+  .transcript-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 0.5px solid var(--border); background: var(--surface2); }
+  .transcript-toolbar-left { display: flex; align-items: center; gap: 8px; font-size: 11px; font-family: system-ui, sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; color: var(--text2); }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); display: none; animation: blink 1s ease-in-out infinite; }
+  .recording .live-dot { display: inline-block; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+  .transcript-body { padding: 1.25rem 1.5rem; min-height: 160px; max-height: 400px; overflow-y: auto; font-size: 15px; line-height: 1.75; color: var(--text); font-family: Georgia, serif; }
+  .placeholder { color: var(--text3); font-style: italic; font-size: 14px; }
+  .interim { color: var(--text3); font-style: italic; }
+  .meta-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; border-top: 0.5px solid var(--border); font-size: 12px; font-family: system-ui, sans-serif; color: var(--text3); }
+
+  .tool-btn { font-size: 12px; font-family: system-ui, sans-serif; font-weight: 500; padding: 5px 12px; border-radius: 6px; border: 1px solid rgba(0,0,0,.15); background: transparent; color: var(--text2); cursor: pointer; }
+  .tool-btn:hover { background: rgba(0,0,0,.05); }
+  .tool-btn.copy-success { color: var(--green-dark); border-color: var(--green); background: var(--green-light); }
+
+  .speaker-block { display: flex; gap: 10px; margin-bottom: 12px; align-items: flex-start; }
+  .speaker-label { font-size: 11px; font-family: system-ui, sans-serif; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; padding: 3px 8px; border-radius: 4px; white-space: nowrap; margin-top: 3px; flex-shrink: 0; }
+  .label-agent { background: var(--green-light); color: var(--green-dark); }
+  .label-lead { background: var(--blue-light); color: var(--blue); }
+  .speaker-text { font-size: 15px; line-height: 1.75; color: var(--text); font-family: Georgia, serif; }
+
+  .spinner-inline { width: 12px; height: 12px; border: 2px solid rgba(180,83,9,.2); border-top-color: #b45309; border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; vertical-align: middle; margin-right: 4px; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  .tips { background: var(--green-light); border-radius: var(--radius-sm); padding: 1rem 1.25rem; font-size: 13px; font-family: system-ui, sans-serif; color: var(--green-dark); line-height: 1.6; margin-top: 1rem; }
+  .tips strong { font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24"><path d="M12 15c1.66 0 3-1.34 3-3V6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V6zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-2.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+    </div>
+    <div>
+      <h1>Audio to Text</h1>
+      <p>Live transcription or upload audio files — powered by AssemblyAI.</p>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" id="tab-live">🎙 Live recording</button>
+    <button class="tab" id="tab-upload">📁 Upload files</button>
+  </div>
+
+  <!-- LIVE PANEL -->
+  <div class="panel active" id="panel-live">
+    <div class="status-bar" id="status-live">Initialising…</div>
+    <div class="recorder-card" id="recorder-card">
+      <div class="wave-wrap" id="wave-wrap"></div>
+      <button class="rec-btn idle" id="rec-btn">
+        <svg viewBox="0 0 24 24"><path d="M12 15c1.66 0 3-1.34 3-3V6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V6zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-2.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+      </button>
+      <span class="rec-label" id="rec-label">Click to start recording</span>
+      <div class="timer" id="timer"></div>
+      <div class="lang-row">Language:
+        <select id="lang-select">
+          <option value="en-GB">English (UK)</option>
+          <option value="en-US">English (US)</option>
+          <option value="fr-FR">French</option>
+          <option value="de-DE">German</option>
+          <option value="es-ES">Spanish</option>
+          <option value="it-IT">Italian</option>
+        </select>
+      </div>
+    </div>
+    <div class="transcript-card">
+      <div class="transcript-toolbar">
+        <div class="transcript-toolbar-left"><span class="live-dot" id="live-dot"></span>Transcript</div>
+        <div style="display:flex;gap:6px;">
+          <button class="tool-btn" id="copy-live-btn">Copy</button>
+          <button class="tool-btn" id="clear-live-btn">Clear</button>
+        </div>
+      </div>
+      <div class="transcript-body" id="transcript-live"><span class="placeholder">Your transcription will appear here…</span></div>
+      <div class="meta-row"><span id="word-live">0 words</span><span id="char-live">0 characters</span></div>
+    </div>
+    <div class="tips"><strong>Tips:</strong> Save as a local HTML file and open in Chrome — microphone access is required. Speak clearly and stop recording to finalise.</div>
+  </div>
+
+  <!-- UPLOAD PANEL -->
+  <div class="panel" id="panel-upload">
+    <div class="status-bar" id="status-upload">Add files below then click Transcribe All.</div>
+    <div class="upload-card">
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg>
+        </div>
+        <div class="drop-title">Drop audio files here</div>
+        <div class="drop-sub">or <span id="browse-link">browse to select</span> — multiple files supported</div>
+        <div class="drop-sub" style="margin-top:6px;">MP3 · WAV · M4A · OGG · WEBM · AAC · FLAC</div>
+      </div>
+      <input type="file" id="file-input" accept="audio/*" multiple>
+
+      <div id="queue-wrap" style="display:none;">
+        <div class="queue-header">
+          <span class="queue-title" id="queue-title">Queue</span>
+          <div class="queue-actions">
+            <button class="btn-sm" id="clear-queue-btn">Clear all</button>
+            <button class="btn-sm btn-primary" id="transcribe-all-btn">Transcribe all</button>
+          </div>
+        </div>
+        <div class="queue-list" id="queue-list"></div>
+      </div>
+    </div>
+
+    <div class="results-section" id="results-section">
+      <div class="queue-header">
+        <span class="queue-title">Results</span>
+        <button class="btn-sm" id="copy-all-btn">Copy all</button>
+      </div>
+      <div id="results-list"></div>
+    </div>
+
+    <div class="tips"><strong>Tips:</strong> Powered by AssemblyAI — a 5 minute call transcribes in ~15 seconds. Speaker labels (Stayful Agent / Lead) are automatically detected from voice patterns.</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var API_BASE = '/api';
+
+  // ── TABS ──────────────────────────────────────────
+  document.getElementById('tab-live').addEventListener('click', function () {
+    document.getElementById('tab-live').classList.add('active');
+    document.getElementById('tab-upload').classList.remove('active');
+    document.getElementById('panel-live').classList.add('active');
+    document.getElementById('panel-upload').classList.remove('active');
+  });
+  document.getElementById('tab-upload').addEventListener('click', function () {
+    document.getElementById('tab-upload').classList.add('active');
+    document.getElementById('tab-live').classList.remove('active');
+    document.getElementById('panel-upload').classList.add('active');
+    document.getElementById('panel-live').classList.remove('active');
+  });
+
+  // ── LIVE RECORDING ────────────────────────────────
+  var logLive = function (msg) { document.getElementById('status-live').textContent = msg; };
+  var waveWrap = document.getElementById('wave-wrap');
+  for (var i = 0; i < 24; i++) {
+    var b = document.createElement('div'); b.className = 'wave-bar';
+    b.style.setProperty('--peak', (14 + Math.random() * 28) + 'px');
+    b.style.setProperty('--dur', (0.5 + Math.random() * 0.7) + 's');
+    b.style.setProperty('--delay', (i / 24 * 0.6) + 's');
+    waveWrap.appendChild(b);
+  }
+
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) logLive('ERROR: Web Speech API not supported — open in Chrome.');
+  else logLive('Ready. Note: microphone only works when opened as a local file in Chrome.');
+
+  var recognition = null, isRecording = false, finalText = '', timerInterval = null, seconds = 0;
+  var recBtn = document.getElementById('rec-btn');
+  var recCard = document.getElementById('recorder-card');
+  var liveBody = document.getElementById('transcript-live');
+
+  recBtn.addEventListener('click', function () {
+    if (!SR) return;
+    if (isRecording) stopRecording(); else startRecording();
+  });
+  document.getElementById('copy-live-btn').addEventListener('click', function () { copyText(finalText, 'copy-live-btn'); });
+  document.getElementById('clear-live-btn').addEventListener('click', function () {
+    if (isRecording) stopRecording();
+    finalText = '';
+    liveBody.innerHTML = '<span class="placeholder">Your transcription will appear here…</span>';
+    updateLiveMeta(); logLive('Cleared.');
+  });
+
+  function startRecording() {
+    try {
+      recognition = new SR();
+      recognition.continuous = true; recognition.interimResults = true;
+      recognition.lang = document.getElementById('lang-select').value;
+      recognition.onstart = function () { logLive('● Recording — speak now.'); };
+      recognition.onresult = function (e) {
+        var interim = '';
+        for (var i = e.resultIndex; i < e.results.length; i++) {
+          var t = e.results[i][0].transcript;
+          if (e.results[i].isFinal) finalText += t + ' '; else interim = t;
+        }
+        renderLive(interim);
+      };
+      recognition.onerror = function (e) {
+        if (e.error === 'no-speech') return;
+        if (e.error === 'not-allowed') logLive('⚠️ Mic blocked — save as HTML file, open in Chrome, allow mic access.');
+        else logLive('Error: ' + e.error);
+        stopRecording();
+      };
+      recognition.onend = function () { if (isRecording) recognition.start(); };
+      recognition.start(); isRecording = true;
+      recBtn.className = 'rec-btn active';
+      recBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="white"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+      document.getElementById('rec-label').textContent = 'Click to stop recording';
+      recCard.classList.add('recording');
+      seconds = 0; updateTimer(); timerInterval = setInterval(updateTimer, 1000);
+    } catch (err) { logLive('Exception: ' + err.message); }
+  }
+
+  function stopRecording() {
+    if (recognition) { recognition.onend = null; recognition.stop(); recognition = null; }
+    isRecording = false;
+    recBtn.className = 'rec-btn idle';
+    recBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="white"><path d="M12 15c1.66 0 3-1.34 3-3V6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V6zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-2.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>';
+    document.getElementById('rec-label').textContent = 'Click to start recording';
+    recCard.classList.remove('recording'); clearInterval(timerInterval);
+    document.getElementById('timer').textContent = '';
+    renderLive('');
+    if (!finalText.trim()) liveBody.innerHTML = '<span class="placeholder">Your transcription will appear here…</span>';
+    logLive('Stopped.');
+  }
+
+  function renderLive(interim) {
+    liveBody.innerHTML = esc(finalText) + (interim ? '<span class="interim">' + esc(interim) + '</span>' : '');
+    if (!finalText.trim() && !interim) liveBody.innerHTML = '<span class="placeholder">Your transcription will appear here…</span>';
+    liveBody.scrollTop = liveBody.scrollHeight; updateLiveMeta();
+  }
+  function updateLiveMeta() {
+    var w = finalText.trim() ? finalText.trim().split(/\s+/).length : 0;
+    document.getElementById('word-live').textContent = w + ' word' + (w !== 1 ? 's' : '');
+    document.getElementById('char-live').textContent = finalText.trim().length + ' character' + (finalText.trim().length !== 1 ? 's' : '');
+  }
+  function updateTimer() {
+    seconds++;
+    document.getElementById('timer').textContent = '● REC ' + String(Math.floor(seconds / 60)).padStart(2, '0') + ':' + String(seconds % 60).padStart(2, '0');
+  }
+
+  // ── UPLOAD + ASSEMBLYAI ───────────────────────────
+  var logUpload = function (msg) { document.getElementById('status-upload').textContent = msg; };
+  var queue = [], isRunning = false, nextId = 0;
+
+  var dropZone = document.getElementById('drop-zone');
+  var fileInput = document.getElementById('file-input');
+
+  document.getElementById('browse-link').addEventListener('click', function (e) { e.stopPropagation(); fileInput.click(); });
+  dropZone.addEventListener('click', function () { fileInput.click(); });
+  dropZone.addEventListener('dragover', function (e) { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', function () { dropZone.classList.remove('drag-over'); });
+  dropZone.addEventListener('drop', function (e) {
+    e.preventDefault(); dropZone.classList.remove('drag-over');
+    addFiles(Array.from(e.dataTransfer.files));
+  });
+  fileInput.addEventListener('change', function () { addFiles(Array.from(fileInput.files)); fileInput.value = ''; });
+  document.getElementById('clear-queue-btn').addEventListener('click', clearQueue);
+  document.getElementById('transcribe-all-btn').addEventListener('click', startQueue);
+  document.getElementById('copy-all-btn').addEventListener('click', copyAllResults);
+
+  function addFiles(files) {
+    files.forEach(function (f) { queue.push({ id: nextId++, file: f, status: 'pending', result: '', html: '' }); });
+    renderQueue();
+  }
+
+  function clearQueue() {
+    if (isRunning) { logUpload('Cannot clear while processing.'); return; }
+    queue = []; renderQueue();
+    document.getElementById('results-section').classList.remove('visible');
+    document.getElementById('results-list').innerHTML = '';
+    logUpload('Queue cleared.');
+  }
+
+  function renderQueue() {
+    var wrap = document.getElementById('queue-wrap');
+    var list = document.getElementById('queue-list');
+    if (queue.length === 0) { wrap.style.display = 'none'; return; }
+    var pending = queue.filter(function (q) { return q.status === 'pending'; }).length;
+    wrap.style.display = 'block';
+    document.getElementById('queue-title').textContent = 'Queue (' + queue.length + ' file' + (queue.length !== 1 ? 's' : '') + ', ' + pending + ' pending)';
+    list.innerHTML = '';
+    queue.forEach(function (item) {
+      var el = document.createElement('div');
+      el.className = 'queue-item'; el.id = 'qi-' + item.id;
+      var badge = {
+        pending: '<span class="qi-status pending">Pending</span>',
+        processing: '<span class="qi-status processing"><span class="spinner-inline"></span>Processing</span>',
+        done: '<span class="qi-status done">✓ Done</span>',
+        error: '<span class="qi-status error">Error</span>'
+      }[item.status] || '';
+      var removeBtn = item.status === 'pending' ? '<button class="qi-remove" data-id="' + item.id + '">×</button>' : '';
+      el.innerHTML =
+        '<div class="qi-icon"><svg viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1014 17V7h4V3h-6z"/></svg></div>' +
+        '<div class="qi-info"><div class="qi-name">' + esc(item.file.name) + '</div><div class="qi-meta">' + formatSize(item.file.size) + '</div>' +
+        (item.status === 'processing' ? '<div class="progress-wrap"><div class="progress-bar" id="pb-' + item.id + '"></div></div>' : '') +
+        '</div>' + badge + removeBtn;
+      list.appendChild(el);
+    });
+    list.querySelectorAll('.qi-remove').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = parseInt(btn.getAttribute('data-id'));
+        queue = queue.filter(function (q) { return q.id !== id; });
+        renderQueue();
+      });
+    });
+  }
+
+  function startQueue() {
+    if (isRunning) return;
+    if (!queue.find(function (q) { return q.status === 'pending'; })) { logUpload('No pending files.'); return; }
+    isRunning = true;
+    document.getElementById('transcribe-all-btn').disabled = true;
+    document.getElementById('results-section').classList.add('visible');
+    processNext();
+  }
+
+  function processNext() {
+    var next = queue.find(function (q) { return q.status === 'pending'; });
+    if (!next) {
+      isRunning = false;
+      document.getElementById('transcribe-all-btn').disabled = false;
+      logUpload('✓ All files transcribed.');
+      return;
+    }
+    next.status = 'processing';
+    renderQueue();
+    transcribeFile(next).then(function () { processNext(); });
+  }
+
+  async function transcribeFile(item) {
+    var pb = function (pct) {
+      var el = document.getElementById('pb-' + item.id);
+      if (el) el.style.width = pct + '%';
+    };
+    try {
+      // Step 1: Upload
+      logUpload(item.file.name + ': Uploading…');
+      pb(15);
+      var uploadRes = await fetch(API_BASE + '/upload', {
+        method: 'POST',
+        headers: { 'content-type': 'application/octet-stream' },
+        body: item.file
+      });
+      if (!uploadRes.ok) {
+        var errText = await uploadRes.text();
+        throw new Error('Upload failed (' + uploadRes.status + '): ' + errText);
+      }
+      var uploadJson = await uploadRes.json();
+      pb(35);
+
+      // Step 2: Submit transcript request
+      logUpload(item.file.name + ': Submitted for transcription…');
+      var submitRes = await fetch(API_BASE + '/transcript', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ audio_url: uploadJson.upload_url, speaker_labels: true, speakers_expected: 2, speech_models: ['universal-3-pro'] })
+      });
+      if (!submitRes.ok) {
+        var errText2 = await submitRes.text();
+        throw new Error('Submit failed (' + submitRes.status + '): ' + errText2);
+      }
+      var submitJson = await submitRes.json();
+      var transcriptId = submitJson.id;
+      pb(45);
+
+      // Step 3: Poll
+      var pollCount = 0;
+      while (true) {
+        await sleep(3000);
+        var pollRes = await fetch(API_BASE + '/transcript?id=' + transcriptId);
+        var pollJson = await pollRes.json();
+        pollCount++;
+        pb(Math.min(45 + pollCount * 6, 92));
+        logUpload(item.file.name + ': ' + pollJson.status + '…');
+
+        if (pollJson.status === 'completed') {
+          pb(100);
+          var html = '', plain = '';
+          if (pollJson.utterances && pollJson.utterances.length > 0) {
+            pollJson.utterances.forEach(function (u) {
+              var isAgent = u.speaker === 'A';
+              var label = isAgent ? 'Stayful Agent' : 'Lead';
+              var cls = isAgent ? 'label-agent' : 'label-lead';
+              html += '<div class="speaker-block"><span class="speaker-label ' + cls + '">' + label + '</span><span class="speaker-text">' + esc(u.text) + '</span></div>';
+              plain += label + ': ' + u.text + '\n\n';
+            });
+          } else {
+            html = '<p style="font-family:Georgia,serif;line-height:1.75">' + esc(pollJson.text || '') + '</p>';
+            plain = pollJson.text || '';
+          }
+          item.status = 'done'; item.result = plain.trim(); item.html = html;
+          renderQueue(); addResultBlock(item);
+          return;
+        }
+
+        if (pollJson.status === 'error') throw new Error(pollJson.error || 'Transcription error');
+      }
+    } catch (err) {
+      item.status = 'error'; item.result = err.message;
+      renderQueue(); addResultBlock(item);
+    }
+  }
+
+  function addResultBlock(item) {
+    var list = document.getElementById('results-list');
+    var block = document.createElement('div');
+    block.className = 'result-block';
+    var words = item.result.trim() ? item.result.trim().split(/\s+/).length : 0;
+    if (item.status === 'done') {
+      block.innerHTML =
+        '<div class="result-header"><div><div class="result-filename">' + esc(item.file.name) + '</div>' +
+        '<div class="result-wordcount">' + words + ' words</div></div>' +
+        '<div style="display:flex;gap:6px;"><button class="tool-btn" id="copy-r-' + item.id + '">Copy</button></div></div>' +
+        '<div class="result-body">' + item.html + '</div>';
+    } else {
+      block.innerHTML =
+        '<div class="result-header"><div class="result-filename">' + esc(item.file.name) + '</div></div>' +
+        '<div class="result-body" style="color:var(--red);font-family:system-ui,sans-serif;font-size:13px;padding:1rem 1.5rem;">Error: ' + esc(item.result) + '</div>';
+    }
+    list.appendChild(block);
+    if (item.status === 'done') {
+      document.getElementById('copy-r-' + item.id).addEventListener('click', function () { copyText(item.result, 'copy-r-' + item.id); });
+    }
+    block.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function copyAllResults() {
+    var all = queue.filter(function (q) { return q.status === 'done'; })
+      .map(function (q) { return '=== ' + q.file.name + ' ===\n\n' + q.result; }).join('\n\n\n');
+    if (!all) { logUpload('No completed transcripts to copy.'); return; }
+    copyText(all, 'copy-all-btn');
+  }
+
+  function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function formatSize(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    return (b / 1048576).toFixed(1) + ' MB';
+  }
+  function copyText(text, btnId) {
+    if (!text || !text.trim()) return;
+    navigator.clipboard.writeText(text.trim()).then(function () {
+      var btn = document.getElementById(btnId); if (!btn) return;
+      var orig = btn.textContent; btn.textContent = 'Copied!'; btn.classList.add('copy-success');
+      setTimeout(function () { btn.textContent = orig; btn.classList.remove('copy-success'); }, 2000);
+    }).catch(function () {
+      var ta = document.createElement('textarea'); ta.value = text.trim();
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    });
+  }
+  function esc(str) {
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+})();
+</script>
+</body>
+</html>

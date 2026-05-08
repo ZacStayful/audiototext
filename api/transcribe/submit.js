@@ -48,7 +48,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         audio_url: fileUrl,
         speaker_labels: true,
-        language_code: 'en_gb',
+        speech_model: 'universal',
         webhook_url: callbackUrl
       })
     });
@@ -87,9 +87,7 @@ async function getMondayAudioUrl(itemId, token) {
   `;
 
   const data = await mondayRequest(query, token);
-  console.log('Monday response:', JSON.stringify(data));
   const assets = data?.data?.items?.[0]?.assets || [];
-  console.log('Assets found:', assets.length, JSON.stringify(assets));
 
   const audioExts = ['mp3', 'mp4', 'wav', 'm4a', 'ogg', 'webm', 'aac', 'flac'];
   const audioAsset = assets.find(a => {

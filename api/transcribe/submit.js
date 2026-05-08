@@ -87,12 +87,16 @@ async function getMondayAudioUrl(itemId, token) {
   `;
 
   const data = await mondayRequest(query, token);
+  console.log('Monday response:', JSON.stringify(data));
   const assets = data?.data?.items?.[0]?.assets || [];
+  console.log('Assets found:', assets.length, JSON.stringify(assets));
 
   const audioExts = ['mp3', 'mp4', 'wav', 'm4a', 'ogg', 'webm', 'aac', 'flac'];
-  const audioAsset = assets.find(a =>
-    audioExts.includes((a.file_extension || a.name.split('.').pop() || '').toLowerCase())
-  );
+  const audioAsset = assets.find(a => {
+    const ext = (a.file_extension || '').replace(/^\./, '').toLowerCase()
+      || (a.name || '').split('.').pop().toLowerCase();
+    return audioExts.includes(ext);
+  });
 
   return audioAsset?.public_url || null;
 }

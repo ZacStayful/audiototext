@@ -48,7 +48,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         audio_url: fileUrl,
         speaker_labels: true,
-        speech_model: 'universal-2',
+        speech_models: ['universal-2'],
         webhook_url: callbackUrl
       })
     });
